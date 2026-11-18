@@ -7,7 +7,7 @@ from src.staff_models import StaffMember,CrewAssignment
 from src.debrief_models import ShowDebrief
 from src.zone_models import EntranceZone,ZonePost
 from src.incident_models import HouseIncident
-from src.lost_models import LostItem,ItemClaim
+from src.lost_models import LostItem,ItemClaim,ClaimBatch,ClaimBatchItem
 from src.auth import hash_password
 
 def seed():
@@ -47,5 +47,11 @@ def seed():
         for prod in s.scalars(select(Production).where(Production.code.in_(['NA-FLOOR','NA-MATINEE']))):
             for code in ['EAST','WEST']:
                 if not s.scalar(select(EntranceZone).where(EntranceZone.production_id==prod.id,EntranceZone.code==code)):s.add(EntranceZone(production_id=prod.id,code=code,capacity=80,required_staff=1,active=True))
-        s.commit();print({t.__tablename__:s.scalar(select(func.count()).select_from(t)) for t in (User,Production,Performance,CrewCall,StaffMember,CrewAssignment,ShowDebrief,EntranceZone,ZonePost,HouseIncident,LostItem,ItemClaim)})
+        floor=s.scalar(select(Production).where(Production.code=='NA-FLOOR'));night=s.scalar(select(Performance).where(Performance.production_id==floor.id,Performance.date==date(2026,11,17)))
+        demo=[(f'LOST-{night.date.strftime("%m%d")}-01','东入口值班台','棕色钱包，内有两张银行卡','演示领取单·陈默','棕色钱包，内有两张银行卡'),(f'LOST-{night.date.strftime("%m%d")}-02','西入口值班台','红色折伞，伞柄刻有QY','演示领取单·陈默','红色折伞，伞柄刻有QY'),(f'LOST-{night.date.strftime("%m%d")}-03','东入口值班台','黑色围巾，边角有流苏','演示领取单·陈默','黑色围巾，边角有流苏')]
+        for code,location,detail,claimant,proof in demo:
+            item=s.scalar(select(LostItem).where(LostItem.code==code))
+            if not item:item=LostItem(performance_id=night.id,code=code,location=location,identifying_detail=detail);s.add(item);s.flush()
+            if not s.scalar(select(ItemClaim).where(ItemClaim.item_id==item.id,ItemClaim.claimant==claimant,ItemClaim.state=='pending')):s.add(ItemClaim(item_id=item.id,claimant=claimant,proof=proof))
+        s.commit();print({t.__tablename__:s.scalar(select(func.count()).select_from(t)) for t in (User,Production,Performance,CrewCall,StaffMember,CrewAssignment,ShowDebrief,EntranceZone,ZonePost,HouseIncident,LostItem,ItemClaim,ClaimBatch,ClaimBatchItem)})
 if __name__=='__main__':seed()

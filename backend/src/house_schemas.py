@@ -27,3 +27,5 @@ class ClaimInput(BaseModel):
     item_id:int
     claimant:str=Field(min_length=2,max_length=100,pattern=r'\S')
     proof:str=Field(min_length=4,max_length=1000,pattern=r'\S')
+class BatchInput(BaseModel):
+    claim_ids:list[int]=Field(min_length=1,max_length=50)

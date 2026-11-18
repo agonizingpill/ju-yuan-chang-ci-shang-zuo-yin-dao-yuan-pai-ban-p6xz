@@ -4,8 +4,8 @@ from .db import db_session
 from .auth import current,writers,admin
 from .zone_models import EntranceZone,ZonePost
 from .incident_models import HouseIncident
-from .lost_models import LostItem,ItemClaim
-from .house_schemas import ZoneInput,PostInput,IncidentInput,DispatchInput,ResolutionInput,LostInput,ClaimInput
+from .lost_models import LostItem,ItemClaim,ClaimBatch,ClaimBatchItem
+from .house_schemas import ZoneInput,PostInput,IncidentInput,DispatchInput,ResolutionInput,LostInput,ClaimInput,BatchInput
 from .services import pack
 from . import zones_service as zones,incidents_service as incidents,lost_service as lost
 router=APIRouter()
@@ -49,3 +49,18 @@ def revise(id:int,d:ClaimInput,s=Depends(db_session),u=Depends(writers)):
 @router.post('/item-claims/{id}/handover')
 def handover(id:int,s=Depends(db_session),u=Depends(admin)):
     x=lost.handover(s,id,u);s.commit();return x
+@router.get('/claim-batches')
+def list_batches(s=Depends(db_session),u=Depends(current)):
+    return lost.batches(s,u)
+@router.post('/claim-batches')
+def compose(d:BatchInput,s=Depends(db_session),u=Depends(writers)):
+    x=lost.compose(s,d,u);s.commit();return x
+@router.post('/claim-batches/{id}/reserve')
+def reserve(id:int,s=Depends(db_session),u=Depends(admin)):
+    x=lost.reserve(s,id,u);s.commit();return x
+@router.post('/claim-batches/{id}/handover')
+def handover_batch(id:int,s=Depends(db_session),u=Depends(admin)):
+    x=lost.handover_batch(s,id,u);s.commit();return x
+@router.post('/claim-batches/{id}/cancel')
+def cancel_batch(id:int,s=Depends(db_session),u=Depends(writers)):
+    x=lost.cancel_batch(s,id,u);s.commit();return x

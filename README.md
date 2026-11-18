@@ -95,21 +95,25 @@ seed另有16名场务、1名停用示例，以及“交接演练·夜场”11-17
 7. 入口分区与岗位覆盖：EntranceZone绑定Production，保存容量、启用状态和最低值守人数，经理配置的总容量不能超过seats。ZonePost只接本场已签到CrewAssignment，一人本场一岗，跨剧目和重复安排拒绝。新的散场交接须先配置启用区，且逐区足额；旧archived记录保留。保存交接后本场岗位冻结，有待归档交接的剧目不能追加分区。
 8. 现场事件与升级：HouseIncident关联同场同剧目入口，normal/high风险，open→经理分派同场已到岗人员assigned→场务登记处置resolved→经理复核closed。任意高风险未closed都阻止新交接归档，包括已处置待经理复核；归档后不再补报该场现场事件。
 9. 失物保管与认领：LostItem保存场次、唯一编号、保管位置和场务识别特征。ItemClaim保存姓名和特征凭据；经理核对匹配后同时将申请和物品变handed_over。凭据不匹配拒交，可修订原申请重试；已交付不可修改、再认领或重复领取。物品锁和数据库部分唯一索引保证一件物品只有一笔成功交付。
+10. 整单领取：同一认领人的多笔待核申请可组成 ClaimBatch 领取单，逐件核验全部通过后整批预约 10 分钟。任一件已被其他领取单占用即整批拒绝（rejected）且不留占用。预约期间其他领取单不能包含该物品、该物品不能单件交付、也不能新增针对它的认领。撤销（cancelled）、任一件凭据修订（整单 cancelled）或占用超时（expired）都会整批释放；单件交付会让所在未预约领取单失效。整批交付按服务器时间重核期限，全部物品与申请在同一事务内变为 handed_over。重复预约返回原预约且不延长，重复交付返回同一结果，不二次占用或交付。
 
 |接口|权限|
 |---|---|
-|GET /entrance-zones、/zone-posts、/house-incidents、/lost-items、/item-claims|三角色读取；viewer看不到失物保管识别特征|
+|GET /entrance-zones、/zone-posts、/house-incidents、/lost-items、/item-claims、/claim-batches|三角色读取；viewer看不到失物保管识别特征|
 |POST /entrance-zones|admin配置入口容量与最低岗位|
 |POST /zone-posts|admin/steward安排已到岗人员岗位|
 |POST /house-incidents、/{id}/resolve|admin/steward登记事件与处置说明|
 |POST /house-incidents/{id}/dispatch、/{id}/close|仅admin分派和复核关闭|
 |POST /lost-items、POST /item-claims、PUT /item-claims/{id}|admin/steward保管、认领与凭据更正|
-|POST /item-claims/{id}/handover|仅admin核验交付|
+|POST /item-claims/{id}/handover|仅admin核验单件交付|
+|POST /claim-batches|admin/steward把同一认领人的待核申请组成领取单|
+|POST /claim-batches/{id}/reserve、/{id}/handover|仅admin整单核验预约与整批交付|
+|POST /claim-batches/{id}/cancel|admin/steward撤销领取单并释放物品|
 
-`zone_models.py`、`incident_models.py`、`lost_models.py`保存五张独立关系表；`zones_service.py`、`incidents_service.py`、`lost_service.py`实现容量/岗位、事件升级和唯一交付；`house_schemas.py`与`house_routes.py`提供请求/权限/事务。`debrief_service.py`对新保存检查岗位，对新归档检查高风险事件；无历史回填、原表无新增列。前端 `pages/zones.js`、`incidents.js`、`lost.js`三页共享 `utils/house.js` 的场次选择，保留原六页。事件枚举在前后端constants。
+`zone_models.py`、`incident_models.py`、`lost_models.py`保存七张独立关系表（新增 claim_batches、claim_batch_items）；`zones_service.py`、`incidents_service.py`、`lost_service.py`实现容量/岗位、事件升级、唯一交付与整单占用；`house_schemas.py`与`house_routes.py`提供请求/权限/事务。`debrief_service.py`对新保存检查岗位，对新归档检查高风险事件；无历史回填、原表无新增列。前端 `pages/zones.js`、`incidents.js`、`lost.js`三页共享 `utils/house.js` 的场次选择，保留原六页；失物页展示领取单状态、占用期限与阻断原因。事件与领取单枚举在前后端constants。
 
-seed为交接演练夜场/午场分别提供EAST/WEST各80容量、最低1岗；不自动分配岗位。剧本：到岗人员沈青/唐禾分别安排两区→登记拥堵高风险→经理分派→现场说明→经理关闭→散场归档；西入口拾到棕色钱包→登记不公开特征→认领人提供描述→经理核对交付。反复seed不覆盖人工岗位、事件处置、认领凭据或原交接。
+seed为交接演练夜场/午场分别提供EAST/WEST各80容量、最低1岗；不自动分配岗位；夜场另有 3 件“演示领取单·陈默”的待核申请供组单演练（自然键去重，重复 seed 不覆盖凭据）。剧本：到岗人员沈青/唐禾分别安排两区→登记拥堵高风险→经理分派→现场说明→经理关闭→散场归档；西入口拾到棕色钱包→登记不公开特征→认领人提供描述→经理核对交付；或勾选陈默三笔申请组成领取单→经理整单核验预约→整批交付。
 
-当前范围：分区配置为固定记录，无临时撤岗/跨区调度/分区删除；要求的最低人数由经理给定。事件不通知外部医疗或安保，不是紧急呼救系统；处置由场务角色代录，未对齐个人登录身份。失物凭据按去首尾空白、不区分字母大小写的完整特征文本匹配，用于演示经理核对，无证件/照片识别或外部认领消息；认领姓名/凭据留本地数据库。原人工签到和运营演练数据范围继续适用。新证据在 `test-artifacts/gb-1025/v3/`。
+当前范围：分区配置为固定记录，无临时撤岗/跨区调度/分区删除；要求的最低人数由经理给定。事件不通知外部医疗或安保，不是紧急呼救系统；处置由场务角色代录，未对齐个人登录身份。失物凭据按去首尾空白、不区分字母大小写的完整特征文本匹配，用于演示经理核对，无证件/照片识别或外部认领消息；认领姓名/凭据留本地数据库。领取单只按认领人合并，可跨场次，不校验物品是否同场；占用为服务端数据库状态，无后台定时任务，超时在读写领取单或交付时惰性清理。原人工签到和运营演练数据范围继续适用。新证据在 `test-artifacts/gb-1025/v3/`。
 
 MIT License。
